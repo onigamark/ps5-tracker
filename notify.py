@@ -28,9 +28,10 @@ def email(subject: str, lines: List[str]) -> None:
     user, pw = os.environ.get("GMAIL_USER"), os.environ.get("GMAIL_APP_PASSWORD")
     if not (user and pw):
         return
+    user, pw = user.strip(), pw.replace(" ", "").strip()  # Google shows app passwords as "abcd efgh ..."
     msg = EmailMessage()
     msg["From"] = user
-    msg["To"] = os.environ.get("ALERT_EMAIL_TO") or user
+    msg["To"] = (os.environ.get("ALERT_EMAIL_TO") or user).strip()
     msg["Subject"] = subject
     msg.set_content("\n\n".join(lines))
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as s:
