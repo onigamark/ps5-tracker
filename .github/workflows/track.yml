@@ -2,7 +2,7 @@ name: track
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # GitHub's minimum; under load it can run late
+    - cron: "3-59/5 * * * *"   # every 5 min at :03, :08, ...; GitHub drops/delays round-minute schedules under load
   workflow_dispatch:
     inputs:
       test_alert:
