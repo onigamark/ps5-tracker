@@ -116,6 +116,46 @@ class StateTransitions(unittest.TestCase):
         self.assertEqual(st["failures"]["rfd"], 1)
 
 
+class Pacing(unittest.TestCase):
+    CFG = {**CFG, "pace_seconds": {"bestbuy": 600}}
+
+    def go(self, st, at, fail=False):
+        def search(r, q):
+            calls.append(at)
+            if fail:
+                raise sources.Blocked("503")
+            return SOLD_OUT
+        calls = []
+        _, st, _ = tracker.run_check(self.CFG, st, {"search": search, "rfd": lambda: RFD_DEFAULT}, clock=lambda: at)
+        return st, bool(calls)
+
+    def test_waits_between_checks(self):
+        st, called = self.go({}, NOON)
+        self.assertTrue(called)
+        st, called = self.go(st, NOON + timedelta(minutes=5))
+        self.assertFalse(called)
+        st, called = self.go(st, NOON + timedelta(minutes=10))
+        self.assertTrue(called)
+
+    def test_backs_off_while_failing(self):
+        st, t, gaps = {}, NOON, []
+        last = None
+        for _ in range(240):  # 4 hours of 1-minute ticks
+            st, called = self.go(st, t, fail=True)
+            if called:
+                if last:
+                    gaps.append(round((t - last).total_seconds() / 60))
+                last = t
+            t += timedelta(minutes=1)
+        self.assertEqual(gaps[:4], [10, 20, 40, 60])
+        self.assertTrue(all(g <= 60 for g in gaps))
+
+    def test_skipped_store_is_not_a_failure(self):
+        st, _ = self.go({}, NOON, fail=True)
+        st, _ = self.go(st, NOON + timedelta(minutes=1))
+        self.assertEqual(st["failures"]["bestbuy"], 1)
+
+
 class Heartbeat(unittest.TestCase):
     def hb(self, alerts):
         return [a for a in alerts if a["priority"] == "min"]

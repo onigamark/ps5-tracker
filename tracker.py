@@ -91,7 +91,14 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None, clock=None,
     """Returns (alerts, new_state, log_lines). Pure apart from `fetchers`/`clock` (injectable for tests)."""
     fetchers = fetchers or {}
     utcnow = (clock or (lambda: datetime.now(timezone.utc)))()
-    use = (lambda src: True) if not only else (lambda src: src in only)  # e.g. {"bestbuy", "rfd"}
+    utc_ts = utcnow.timestamp()
+    next_try: Dict[str, float] = dict(state.get("next_try", {}))
+    pace: Dict[str, int] = cfg.get("pace_seconds", {})
+
+    def use(src: str) -> bool:
+        if only and src not in only:
+            return False
+        return next_try.get(src, 0) <= utc_ts + 5  # paced stores wait their turn (5s slack for timer drift)
     search = fetchers.get("search") or (lambda r, q: SEARCHERS[r](q))
     page = fetchers.get("page") or sources.product_page
     feed = fetchers.get("rfd") or sources.rfd
@@ -197,6 +204,15 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None, clock=None,
             failed_sources["rfd"] = f"{type(e).__name__}: {e}"
 
     # Source health: one alert when a store goes blind, one when it recovers.
+    # Pacing: a store with pace_seconds waits that long between checks, and backs off
+    # (doubling, max 1h) while it's failing, so a rate-limit block can clear instead of renewing.
+    for s in ok_sources | set(failed_sources):
+        base = pace.get(s, 0)
+        if s in failed_sources and base:
+            n = failures.get(s, 0) + 1
+            next_try[s] = utc_ts + min(base * 2 ** (n - 1), 3600)
+        elif base:
+            next_try[s] = utc_ts + base
     for s in ok_sources - set(failed_sources):
         failures[s] = 0
         if blind.pop(s, False):
@@ -226,7 +242,7 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None, clock=None,
         stats, last_hb = {"checks": 0, "ok": {}, "fail": {}, "since": now}, local.date().isoformat()
 
     new_state = {"live": live, "failures": failures, "blind": blind, "rfd_seen": seen, "last_run": now,
-                 "stats": stats, "last_heartbeat": last_hb}
+                 "stats": stats, "last_heartbeat": last_hb, "next_try": next_try}
     return alerts, new_state, log
 
 
