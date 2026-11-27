@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,12 +26,18 @@ CFG = {
 }
 
 
-def run(state, listings=None, threads=None, search_error=None):
+SOLD_OUT = [L(key="bestbuy:0", in_stock=False)]
+RFD_DEFAULT = [{"id": "0", "title": "Xbox deal", "url": "u0"}]
+NOON = datetime(2026, 11, 27, 17, 0, tzinfo=timezone.utc)  # 12:00 Toronto
+
+
+def run(state, listings=None, threads=None, search_error=None, at=NOON):
     def search(r, q):
         if search_error:
             raise search_error
-        return listings or []
-    return tracker.run_check(CFG, state, {"search": search, "rfd": lambda: threads or []})
+        return SOLD_OUT if listings is None else listings
+    return tracker.run_check(CFG, state, {"search": search, "rfd": lambda: threads or RFD_DEFAULT},
+                             clock=lambda: at, name="cloud")
 
 
 class Matching(unittest.TestCase):
@@ -96,8 +103,48 @@ class StateTransitions(unittest.TestCase):
             a, st, _ = run(st, search_error=sources.Blocked("captcha"))
             titles += [x["title"] for x in a]
         self.assertEqual(titles, ["Tracker is blind on bestbuy"])
-        a, st, _ = run(st, [])
+        a, st, _ = run(st)
         self.assertEqual([x["title"] for x in a], ["Tracker can see bestbuy again"])
+
+    def test_empty_search_counts_as_failure(self):
+        _, st, log = run({}, [])
+        self.assertEqual(st["failures"]["bestbuy"], 1)
+        self.assertTrue(any("no results" in line for line in log))
+
+    def test_empty_feed_counts_as_failure(self):
+        _, st, _ = tracker.run_check(CFG, {}, {"search": lambda r, q: SOLD_OUT, "rfd": lambda: []}, clock=lambda: NOON)
+        self.assertEqual(st["failures"]["rfd"], 1)
+
+
+class Heartbeat(unittest.TestCase):
+    def hb(self, alerts):
+        return [a for a in alerts if a["priority"] == "min"]
+
+    def test_daily_after_9am_local_once(self):
+        a, st, _ = run({})                       # day 1 noon: first run, no heartbeat
+        self.assertEqual(self.hb(a), [])
+        for i in range(5):
+            a, st, _ = run(st, at=NOON + timedelta(minutes=5 * i))
+            self.assertEqual(self.hb(a), [])
+        early = datetime(2026, 11, 28, 13, 0, tzinfo=timezone.utc)   # day 2, 8:00 Toronto
+        a, st, _ = run(st, at=early)
+        self.assertEqual(self.hb(a), [])
+        a, st, _ = run(st, at=early + timedelta(hours=1, minutes=5))  # 9:05 Toronto
+        [h] = self.hb(a)
+        self.assertIn("cloud: still watching (8 checks, all stores OK)", h["title"])
+        a, st, _ = run(st, at=early + timedelta(hours=2))
+        self.assertEqual(self.hb(a), [], "only once a day")
+
+    def test_reports_failures(self):
+        _, st, _ = run({})
+        _, st, _ = run(st, search_error=sources.Blocked("x"))
+        a, _, _ = run(st, at=NOON + timedelta(days=1))
+        [h] = self.hb(a)
+        self.assertIn("some checks failed", h["title"])
+        self.assertIn("bestbuy ⚠ 2/3", h["message"])
+
+    def test_heartbeat_is_push_only(self):
+        self.assertLess(tracker.RANK["min"], tracker.RANK["high"])
 
 
 class SourceFilter(unittest.TestCase):
@@ -137,6 +184,7 @@ class DealFeed(unittest.TestCase):
         alerts, st, _ = run(st, threads=new)
         self.assertEqual([a["url"] for a in alerts], ["u2"])
         self.assertEqual(run(st, threads=new)[0], [])
+        self.assertNotIn("bestbuy", [k for k, v in st["failures"].items() if v])
 
 
 class Parsers(unittest.TestCase):

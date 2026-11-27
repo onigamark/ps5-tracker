@@ -26,6 +26,16 @@ priced between the hunt's `min_price` and `max_price`. Refurbished/open-box/used
 - Alerts fire only on **changes**: newly buyable, price dropped 5%+, a new matching RFD thread,
   or a store started/stopped blocking the tracker. A sold-out → back-in-stock restock alerts again.
 
+## Knowing it's alive
+
+- **Daily heartbeat:** after 9 a.m. (`TRACKER_TZ`, default Toronto) each tracker sends a *silent*
+  push: "Cloud (Best Buy + RFD): still watching (288 checks, all stores OK)". The Mac sends its own;
+  if it's missing, the Mac was asleep.
+- **Blind alerts:** a store that errors, shows a bot wall, or returns an empty search 3 checks in a
+  row triggers one "tracker is blind" alert, then one "can see again" when it recovers.
+- **Keepalive:** `.github/workflows/keepalive.yml` commits a timestamp monthly so GitHub never
+  disables the schedule for inactivity. Run `git pull` before editing locally.
+
 ## Setup (about 10 minutes)
 
 1. **ntfy:** install the ntfy app (iOS/Android). Subscribe to a topic name nobody could guess,

@@ -6,7 +6,7 @@ import urllib.request
 from email.message import EmailMessage
 from typing import List
 
-PRIORITY = {"urgent": 5, "high": 4, "default": 3, "low": 2}
+PRIORITY = {"urgent": 5, "high": 4, "default": 3, "low": 2, "min": 1}
 
 
 def ntfy(title: str, message: str, url: str = "", priority: str = "default", tags=()) -> None:

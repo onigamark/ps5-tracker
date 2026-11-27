@@ -9,5 +9,6 @@ LOG="$HOME/Library/Logs/ps5-tracker.log"
 if [ -f "$LOG" ] && [ "$(stat -f%z "$LOG")" -gt 1000000 ]; then
   tail -n 2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
+export TRACKER_NAME="${TRACKER_NAME:-Mac (Walmart + Amazon)}"
 exec /usr/bin/python3 "$DIR/tracker.py" --quiet --sources "${TRACKER_SOURCES:-walmart,amazon}" \
   --state "$DIR/state/mac-state.json"

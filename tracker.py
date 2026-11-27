@@ -26,7 +26,7 @@ import sources
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PRICE_DROP_PCT = 5  # re-alert on an already-live listing if it gets this much cheaper
-RANK = {"low": 0, "default": 1, "high": 2, "urgent": 3}
+RANK = {"min": -1, "low": 0, "default": 1, "high": 2, "urgent": 3}
 
 
 # --- Matching ----------------------------------------------------------------
@@ -86,9 +86,11 @@ def save_json(path: str, data) -> None:
 SEARCHERS = {"bestbuy": sources.bestbuy, "walmart": sources.walmart}
 
 
-def run_check(cfg: dict, state: dict, fetchers=None, only=None) -> Tuple[List[dict], dict, List[str]]:
-    """Returns (alerts, new_state, log_lines). Pure apart from `fetchers` (injectable for tests)."""
+def run_check(cfg: dict, state: dict, fetchers=None, only=None, clock=None,
+              name="tracker") -> Tuple[List[dict], dict, List[str]]:
+    """Returns (alerts, new_state, log_lines). Pure apart from `fetchers`/`clock` (injectable for tests)."""
     fetchers = fetchers or {}
+    utcnow = (clock or (lambda: datetime.now(timezone.utc)))()
     use = (lambda src: True) if not only else (lambda src: src in only)  # e.g. {"bestbuy", "rfd"}
     search = fetchers.get("search") or (lambda r, q: SEARCHERS[r](q))
     page = fetchers.get("page") or sources.product_page
@@ -99,7 +101,7 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None) -> Tuple[List[di
     failures: Dict[str, int] = dict(state.get("failures", {}))
     blind: Dict[str, bool] = dict(state.get("blind", {}))
     blind_after = cfg.get("blind_after_failures", 3)
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = utcnow.isoformat(timespec="seconds")
 
     live: Dict[str, dict] = {}
     ok_sources, failed_sources, log = set(), {}, []
@@ -108,7 +110,12 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None) -> Tuple[List[di
     def fetch_search(retailer: str, query: str):
         k = (retailer, query)
         if k not in cache:
-            cache[k] = search(retailer, query)
+            found = search(retailer, query)
+            if not found:
+                # A broad PS5 search never legitimately returns nothing: the store changed its
+                # page/API or served an empty bot page. Count it as a failure, not "all sold out".
+                raise sources.Blocked(f"{retailer}: search returned no results")
+            cache[k] = found
         return cache[k]
 
     candidates = []  # (hunt-like dict, listing)
@@ -173,6 +180,8 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None) -> Tuple[List[di
     if rfd_cfg.get("enabled") and use("rfd"):
         try:
             threads = feed()
+            if not threads:
+                raise sources.Blocked("rfd: feed had no threads")
             ok_sources.add("rfd")
             first_run = "rfd_seen" not in state
             for t in threads:
@@ -203,8 +212,45 @@ def run_check(cfg: dict, state: dict, fetchers=None, only=None) -> Tuple[List[di
                                       "Restocks there will be missed until it recovers.",
                            "priority": "default", "tags": ["warning"]})
 
-    new_state = {"live": live, "failures": failures, "blind": blind, "rfd_seen": seen, "last_run": now}
+    # Daily heartbeat so silence means "nothing in stock", not "tracker died".
+    stats = dict(state.get("stats") or {"checks": 0, "ok": {}, "fail": {}, "since": now})
+    stats["checks"] += 1
+    stats["ok"] = {**stats["ok"], **{s: stats["ok"].get(s, 0) + 1 for s in ok_sources - set(failed_sources)}}
+    stats["fail"] = {**stats["fail"], **{s: stats["fail"].get(s, 0) + 1 for s in failed_sources}}
+    local = utcnow.astimezone(_tz())
+    last_hb = state.get("last_heartbeat")
+    if last_hb is None:
+        last_hb = local.date().isoformat()  # first run: start counting, first heartbeat tomorrow
+    elif local.hour >= HEARTBEAT_HOUR and local.date().isoformat() != last_hb:
+        alerts.append(_heartbeat(name, stats, live))
+        stats, last_hb = {"checks": 0, "ok": {}, "fail": {}, "since": now}, local.date().isoformat()
+
+    new_state = {"live": live, "failures": failures, "blind": blind, "rfd_seen": seen, "last_run": now,
+                 "stats": stats, "last_heartbeat": last_hb}
     return alerts, new_state, log
+
+
+HEARTBEAT_HOUR = 9
+
+
+def _tz():
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(os.environ.get("TRACKER_TZ", "America/Toronto"))
+    except Exception:  # noqa: BLE001 - no tz database: fall back to UTC
+        return timezone.utc
+
+
+def _heartbeat(name: str, stats: dict, live: dict) -> dict:
+    srcs = sorted(set(stats["ok"]) | set(stats["fail"]))
+    parts = []
+    for s in srcs:
+        ok, bad = stats["ok"].get(s, 0), stats["fail"].get(s, 0)
+        parts.append(f"{s} {'✓' if bad == 0 else '⚠'} {ok}/{ok + bad}")
+    status = "all stores OK" if all(stats["fail"].get(s, 0) == 0 for s in srcs) else "some checks failed"
+    return {"title": f"{name}: still watching ({stats['checks']} checks, {status})",
+            "message": ", ".join(parts) + (f"\nCurrently buyable: {len(live)}" if live else "\nNothing buyable yet."),
+            "priority": "min", "tags": ["eyes"]}
 
 
 def _stock_alert(l: sources.Listing, e: dict, what: str) -> dict:
@@ -279,7 +325,7 @@ def main() -> int:
         cfg = load_json(args.config, {})
         state = load_json(args.state, {})
         only = {x.strip() for x in args.sources.split(",") if x.strip()} or None
-        alerts, state, log = run_check(cfg, state, only=only)
+        alerts, state, log = run_check(cfg, state, only=only, name=os.environ.get("TRACKER_NAME", "tracker"))
         if args.quiet:
             log = [line for line in log if line.startswith(("BUYABLE", "FAILED"))]
         if log or alerts or not args.quiet:

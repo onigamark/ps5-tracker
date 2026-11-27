@@ -29,6 +29,8 @@ jobs:
       STATE_FILE: state/state.json
       # Walmart and Amazon block GitHub's servers; the Mac helper (mac/) checks those.
       TRACKER_SOURCES: bestbuy,rfd
+      TRACKER_NAME: "Cloud (Best Buy + RFD)"
+      TRACKER_TZ: America/Toronto
     steps:
       - uses: actions/checkout@v4
 
