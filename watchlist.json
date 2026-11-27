@@ -155,6 +155,8 @@
   "blind_after_failures": 3,
   "_pace_readme": "Minimum seconds between checks of a store. While a store is failing the wait doubles (max 1 hour). Amazon rate-limits frequent checks.",
   "pace_seconds": {
-    "amazon": 600
+    "amazon": 600,
+    "bestbuy": 120,
+    "rfd": 180
   }
 }
