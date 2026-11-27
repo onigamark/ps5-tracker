@@ -216,6 +216,20 @@ def _stock_alert(l: sources.Listing, e: dict, what: str) -> dict:
 
 # --- Delivery & CLI ----------------------------------------------------------
 
+MAX_PUSHES = 3
+
+
+def push_plan(alerts: List[dict]) -> List[dict]:
+    """Most important alerts individually, the rest folded into one summary push."""
+    ranked = sorted(alerts, key=lambda a: -RANK[a["priority"]])
+    if len(ranked) <= MAX_PUSHES + 1:
+        return ranked
+    head, rest = ranked[:MAX_PUSHES], ranked[MAX_PUSHES:]
+    return head + [{"title": f"+{len(rest)} more PS5 alerts", "priority": rest[0]["priority"],
+                    "message": "\n".join("• " + a["title"] for a in rest[:15]), "url": rest[0].get("url", ""),
+                    "tags": ["video_game"]}]
+
+
 def deliver(alerts: List[dict], dry_run: bool) -> None:
     if not alerts:
         return
@@ -225,7 +239,7 @@ def deliver(alerts: List[dict], dry_run: bool) -> None:
         for a in alerts:
             print(f"ALERT [{a['priority']}] {a['title']}\n      {a['message']}")
         return
-    for a in alerts:
+    for a in push_plan(alerts):
         try:
             notify.ntfy(a["title"], a["message"], a.get("url", ""), a["priority"], a.get("tags", ()))
         except Exception:  # noqa: BLE001

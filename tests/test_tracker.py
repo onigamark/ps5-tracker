@@ -111,6 +111,20 @@ class SourceFilter(unittest.TestCase):
         self.assertNotIn("bestbuy", st["failures"])
 
 
+class PushPlan(unittest.TestCase):
+    def test_many_alerts_fold_into_summary(self):
+        alerts = [{"title": f"a{i}", "message": "", "priority": "high"} for i in range(16)]
+        alerts.append({"title": "PRO", "message": "", "priority": "urgent"})
+        plan = tracker.push_plan(alerts)
+        self.assertEqual(len(plan), 4)
+        self.assertEqual(plan[0]["title"], "PRO")
+        self.assertEqual(plan[-1]["title"], "+14 more PS5 alerts")
+
+    def test_few_alerts_sent_individually(self):
+        alerts = [{"title": f"a{i}", "message": "", "priority": "high"} for i in range(4)]
+        self.assertEqual(len(tracker.push_plan(alerts)), 4)
+
+
 class DealFeed(unittest.TestCase):
     T = [{"id": "1", "title": "[Best Buy] PS5 Slim $499", "url": "u1"}]
 
