@@ -27,6 +27,8 @@ jobs:
       GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
       ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
       STATE_FILE: state/state.json
+      # Walmart and Amazon block GitHub's servers; the Mac helper (mac/) checks those.
+      TRACKER_SOURCES: bestbuy,rfd
     steps:
       - uses: actions/checkout@v4
 

@@ -100,6 +100,17 @@ class StateTransitions(unittest.TestCase):
         self.assertEqual([x["title"] for x in a], ["Tracker can see bestbuy again"])
 
 
+class SourceFilter(unittest.TestCase):
+    def test_only_skips_other_sources_without_counting_failures(self):
+        calls = []
+        def search(r, q):
+            calls.append(r)
+            raise sources.Blocked("x")
+        _, st, _ = tracker.run_check(CFG, {}, {"search": search, "rfd": lambda: []}, only={"rfd"})
+        self.assertEqual(calls, [])
+        self.assertNotIn("bestbuy", st["failures"])
+
+
 class DealFeed(unittest.TestCase):
     T = [{"id": "1", "title": "[Best Buy] PS5 Slim $499", "url": "u1"}]
 

@@ -86,9 +86,10 @@ def save_json(path: str, data) -> None:
 SEARCHERS = {"bestbuy": sources.bestbuy, "walmart": sources.walmart}
 
 
-def run_check(cfg: dict, state: dict, fetchers=None) -> Tuple[List[dict], dict, List[str]]:
+def run_check(cfg: dict, state: dict, fetchers=None, only=None) -> Tuple[List[dict], dict, List[str]]:
     """Returns (alerts, new_state, log_lines). Pure apart from `fetchers` (injectable for tests)."""
     fetchers = fetchers or {}
+    use = (lambda src: True) if not only else (lambda src: src in only)  # e.g. {"bestbuy", "rfd"}
     search = fetchers.get("search") or (lambda r, q: SEARCHERS[r](q))
     page = fetchers.get("page") or sources.product_page
     feed = fetchers.get("rfd") or sources.rfd
@@ -113,6 +114,8 @@ def run_check(cfg: dict, state: dict, fetchers=None) -> Tuple[List[dict], dict, 
     candidates = []  # (hunt-like dict, listing)
     for h in cfg.get("hunts", []):
         for r in h.get("retailers", []):
+            if not use(r):
+                continue
             try:
                 found = fetch_search(r, h.get("query") or h["name"])
                 ok_sources.add(r)
@@ -124,6 +127,8 @@ def run_check(cfg: dict, state: dict, fetchers=None) -> Tuple[List[dict], dict, 
                     candidates.append((h, l))
     for w in cfg.get("watches", []):
         src = w["retailer"]
+        if not use(src):
+            continue
         try:
             l = page(src, w["url"], w["name"])
             ok_sources.add(src)
@@ -165,7 +170,7 @@ def run_check(cfg: dict, state: dict, fetchers=None) -> Tuple[List[dict], dict, 
     # RedFlagDeals feed.
     rfd_cfg = cfg.get("deal_feed", {})
     seen = list(state.get("rfd_seen", []))
-    if rfd_cfg.get("enabled"):
+    if rfd_cfg.get("enabled") and use("rfd"):
         try:
             threads = feed()
             ok_sources.add("rfd")
@@ -241,6 +246,9 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--loop", type=int, metavar="SECONDS")
     ap.add_argument("--test-alert", action="store_true")
+    ap.add_argument("--sources", default=os.environ.get("TRACKER_SOURCES", ""),
+                    help="comma list to check, e.g. bestbuy,rfd (default: everything)")
+    ap.add_argument("--quiet", action="store_true", help="only print alerts and failures")
     args = ap.parse_args()
 
     if args.test_alert:
@@ -256,9 +264,13 @@ def main() -> int:
     while True:
         cfg = load_json(args.config, {})
         state = load_json(args.state, {})
-        alerts, state, log = run_check(cfg, state)
-        print(f"--- {state['last_run']}  {len(alerts)} alert(s)")
-        print("\n".join(log))
+        only = {x.strip() for x in args.sources.split(",") if x.strip()} or None
+        alerts, state, log = run_check(cfg, state, only=only)
+        if args.quiet:
+            log = [line for line in log if line.startswith(("BUYABLE", "FAILED"))]
+        if log or alerts or not args.quiet:
+            print(f"--- {state['last_run']}  {len(alerts)} alert(s)")
+            print("\n".join(log), flush=True)
         deliver(alerts, args.dry_run)
         if not args.dry_run:
             save_json(args.state, state)

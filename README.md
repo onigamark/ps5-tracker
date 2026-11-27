@@ -49,17 +49,21 @@ Edit `watchlist.json` and push. Each **hunt** searches Best Buy/Walmart:
 
 Each **watch** is one product page (`retailer`, `url`, `min_price`, `max_price`).
 
-## Run it on your Mac too
+## The Mac helper (Walmart + Amazon)
 
-GitHub's schedule can run late during busy periods. On a big launch day, run it locally every 45s as well:
+Walmart and Amazon block GitHub's servers, so the cloud job checks only Best Buy + RedFlagDeals
+(`TRACKER_SOURCES: bestbuy,rfd` in the workflow) and your Mac checks Walmart + Amazon every 60s.
 
 ```sh
-export NTFY_TOPIC=your-topic
-python3 tracker.py --dry-run     # see what it sees, no alerts, no state saved
-python3 tracker.py --loop 45     # check every 45 seconds
+./mac/install.sh      # asks for the ntfy topic once, saves it in ~/.config/ps5-tracker/env (private)
+./mac/uninstall.sh    # stop it
+tail -f ~/Library/Logs/ps5-tracker.log    # quiet unless something is buyable or a store fails
 ```
 
-Local and cloud runs keep separate state, so both may alert for the same drop. That's harmless.
+It runs while you're logged in and the Mac is awake; it pauses during sleep (lid closed).
+Push alerts only, unless you add `GMAIL_USER=` / `GMAIL_APP_PASSWORD=` lines to the env file.
+
+Manual runs: `python3 tracker.py --dry-run` shows everything it sees without alerting or saving state.
 
 ## Be ready to buy in under a minute
 
