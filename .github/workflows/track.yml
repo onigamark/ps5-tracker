@@ -1,0 +1,60 @@
+name: track
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # GitHub's minimum; under load it can run late
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: "Send a test push/email instead of checking"
+        type: boolean
+        default: false
+
+concurrency:
+  group: track
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+      STATE_FILE: state/state.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore last run's state
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: tracker-state-${{ github.run_id }}
+          restore-keys: tracker-state-
+
+      - name: Send test alert
+        if: inputs.test_alert
+        run: python3 tracker.py --test-alert
+
+      - name: Check stores
+        if: ${{ !inputs.test_alert }}
+        run: python3 tracker.py
+
+      - name: Save state for next run
+        if: ${{ always() && !inputs.test_alert }}
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: tracker-state-${{ github.run_id }}
+
+  tests:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests

@@ -1,0 +1,156 @@
+{
+  "_readme": "Hunts search a retailer for products. A listing alerts when its name contains every 'include' word, none of the 'exclude' words, costs between min_price and max_price (CAD; min_price filters out accessories), is in stock, and is sold by the retailer itself (not a marketplace reseller). Edit freely, then commit.",
+  "hunts": [
+    {
+      "name": "PS5 Pro",
+      "query": "playstation 5 pro console",
+      "include": [
+        "playstation 5 pro"
+      ],
+      "exclude": [
+        "housing",
+        "faceplate",
+        "cover",
+        "skin",
+        "stand",
+        "controller",
+        "disc drive"
+      ],
+      "max_price": 1150,
+      "retailers": [
+        "bestbuy",
+        "walmart"
+      ],
+      "priority": "urgent",
+      "min_price": 350
+    },
+    {
+      "name": "PS5 Slim / standard",
+      "query": "playstation 5 slim console",
+      "include": [
+        "playstation 5"
+      ],
+      "exclude": [
+        "pro",
+        "portal",
+        "housing",
+        "faceplate",
+        "cover",
+        "skin",
+        "stand",
+        "controller",
+        "disc drive",
+        "charging"
+      ],
+      "max_price": 850,
+      "retailers": [
+        "bestbuy",
+        "walmart"
+      ],
+      "priority": "urgent",
+      "min_price": 350
+    },
+    {
+      "name": "Ghost of Yotei Limited Edition",
+      "query": "playstation 5 ghost of yotei limited edition",
+      "include": [
+        "playstation 5",
+        "ghost of yotei",
+        "limited"
+      ],
+      "exclude": [],
+      "max_price": 1000,
+      "retailers": [
+        "bestbuy",
+        "walmart"
+      ],
+      "priority": "urgent",
+      "min_price": 350
+    },
+    {
+      "name": "Any PS5 console deal",
+      "query": "playstation 5 console",
+      "include": [
+        "playstation 5"
+      ],
+      "exclude": [
+        "portal",
+        "housing",
+        "faceplate",
+        "cover",
+        "skin",
+        "stand",
+        "controller",
+        "disc drive",
+        "charging"
+      ],
+      "max_price": 600,
+      "retailers": [
+        "bestbuy",
+        "walmart"
+      ],
+      "priority": "high",
+      "min_price": 350
+    }
+  ],
+  "_watches_readme": "Single product pages for stores without a usable search (PlayStation Direct, EB Games, Costco, Amazon.ca). Best effort: these stores often block automated checks, and you get one 'tracker is blind' alert if so.",
+  "watches": [
+    {
+      "name": "PS5 Pro (Amazon.ca)",
+      "retailer": "amazon",
+      "url": "https://www.amazon.ca/dp/B0DGY63Z2H",
+      "min_price": 350,
+      "max_price": 1150,
+      "priority": "urgent"
+    },
+    {
+      "name": "PS5 Pro, 2nd listing (Amazon.ca)",
+      "retailer": "amazon",
+      "url": "https://www.amazon.ca/dp/B0FR94FV8J",
+      "min_price": 350,
+      "max_price": 1150,
+      "priority": "urgent"
+    },
+    {
+      "name": "PS5 Slim Disc (Amazon.ca)",
+      "retailer": "amazon",
+      "url": "https://www.amazon.ca/dp/B0CL7RQRY9",
+      "min_price": 350,
+      "max_price": 850,
+      "priority": "urgent"
+    },
+    {
+      "name": "PS5 Slim Digital (Amazon.ca)",
+      "retailer": "amazon",
+      "url": "https://www.amazon.ca/dp/B0CL7NKBBL",
+      "min_price": 350,
+      "max_price": 800,
+      "priority": "urgent"
+    }
+  ],
+  "deal_feed": {
+    "_readme": "RedFlagDeals Hot Deals. Alerts on new threads whose title contains any 'any_of' word and none of 'exclude'.",
+    "enabled": true,
+    "any_of": [
+      "ps5",
+      "playstation 5",
+      "playstation5"
+    ],
+    "exclude": [
+      "game only",
+      "portal",
+      "headset",
+      "pulse"
+    ],
+    "priority": "high"
+  },
+  "excluded_conditions": [
+    "refurb",
+    "renewed",
+    "open box",
+    "pre-owned",
+    "preowned",
+    "used"
+  ],
+  "blind_after_failures": 3
+}
